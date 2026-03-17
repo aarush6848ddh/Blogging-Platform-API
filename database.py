@@ -1,17 +1,22 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 
-# This is the database URL for SQLite.
-# "sqlite:///" means we are using SQLite and the database file will be located in the current directory.
-# SQLite is a lightweight, file-based database that is easy to set up and use for small applications like this one.
-# "./blog.db" specifies the name of the database file. If it doesn't exist, it will be created automatically when we run the application.
+# this line retrieves the database URL from an environment variable named DATABASE_URL. 
+# If the environment variable is not set, it defaults to a PostgreSQL connection string 
+# that points to a database named "blogdb" running on a host named "db" with the username 
+# "postgres" and password "password". This allows us to easily configure the database 
+# connection without hardcoding sensitive information in our code, and it also makes 
+# it easier to switch between different databases (e.g., for development and production) 
+# by simply changing the environment variable.
 
-DATABASE_URL = "sqlite:///./blog.db"
+DATABASE_URL = os.getenv("DATABASE_URL",
+  "postgresql://postgres:password@db:5432/blogdb")   
 
 # Create the SQLAlchemy engine, which is responsible for managing the connection to the database.
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(DATABASE_URL)
 
 # Create a configured "SessionLocal" class that will be used to create database sessions.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)            
