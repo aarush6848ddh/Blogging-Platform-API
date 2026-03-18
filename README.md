@@ -1,6 +1,39 @@
 # Blogging Platform API
 
-A RESTful API for a personal blogging platform built with FastAPI and SQLite. This project was built to learn FastAPI, REST API design, and basic full stack development concepts.
+A RESTful API for a personal blogging platform built with FastAPI, PostgreSQL, and Redis. Built to learn FastAPI, containerization with Docker, and caching patterns.
+
+## Architecture
+
+```
+                        ┌─────────────────────────────────────┐
+                        │         Docker Network              │
+                        │                                     │
+  HTTP Request          │  ┌─────────────┐                   │
+──────────────────────► │  │   FastAPI   │                   │
+  localhost:8000        │  │  (Uvicorn)  │                   │
+                        │  └──────┬──────┘                   │
+                        │         │                           │
+                        │    GET /posts/{id}?                 │
+                        │         │                           │
+                        │   ┌─────▼──────┐   cache hit       │
+                        │   │   Redis    │ ──────────────►    │
+                        │   │  (port 6379)│   return JSON     │
+                        │   └─────┬──────┘                   │
+                        │         │ cache miss                │
+                        │   ┌─────▼──────┐                   │
+                        │   │ PostgreSQL │                    │
+                        │   │ (port 5432)│                    │
+                        │   └────────────┘                    │
+                        │                                     │
+                        └─────────────────────────────────────┘
+```
+
+**Request flow for `GET /posts/{id}`:**
+1. FastAPI checks Redis for `post:{id}`
+2. Cache hit → return instantly (no DB query)
+3. Cache miss → query PostgreSQL, store result in Redis for 60s, return post
+
+All other endpoints go directly to PostgreSQL.
 
 ## What I Learned
 
@@ -11,43 +44,51 @@ A RESTful API for a personal blogging platform built with FastAPI and SQLite. Th
 - How to validate request/response data using Pydantic schemas
 - Path parameters vs query parameters
 - Dependency injection with `Depends()`
-- Auto-generated API documentation with Swagger UI
+- Auto-generated API docs with Swagger UI
+- Swapping SQLite for PostgreSQL
+- Containerizing an app with Docker and docker-compose
+- Wiring multiple services together in a Docker network
+- Fixing container startup race conditions with healthchecks
+- Caching with Redis (`get`, `setex`, cache-aside pattern)
 
 ## Project Structure
 
 ```
 Blogging-Platform-API/
-├── main.py          # FastAPI app entry point, registers routes
-├── database.py      # Database connection and session setup
-├── models.py        # Database table definitions (SQLAlchemy)
-├── schemas.py       # Request/response shapes (Pydantic)
-├── crud.py          # Database operations (Create, Read, Update, Delete)
+├── main.py              # FastAPI app entry point, registers routes
+├── database.py          # Database connection and session setup
+├── models.py            # Database table definitions (SQLAlchemy)
+├── schemas.py           # Request/response shapes (Pydantic)
+├── crud.py              # Database operations (Create, Read, Update, Delete)
 ├── routers/
-│   └── posts.py     # All /posts API routes
+│   └── posts.py         # All /posts API routes + Redis caching
+├── Dockerfile           # Container definition for the FastAPI app
+├── docker-compose.yml   # Orchestrates FastAPI + PostgreSQL + Redis
 └── requirements.txt
 ```
 
 ## Tech Stack
 
-- **FastAPI** — web framework
-- **SQLite** — database (stored in `blog.db`)
-- **SQLAlchemy** — ORM for database operations
-- **Pydantic** — data validation
-- **Uvicorn** — ASGI server
+| Tool | Purpose |
+|------|---------|
+| **FastAPI** | Web framework |
+| **PostgreSQL** | Primary database |
+| **Redis** | In-memory cache |
+| **SQLAlchemy** | ORM for database operations |
+| **Pydantic** | Data validation |
+| **Uvicorn** | ASGI server |
+| **Docker** | Containerization |
+| **docker-compose** | Multi-container orchestration |
 
-## Setup
+## Running with Docker
 
-1. Install dependencies:
-```
-python3 -m pip install fastapi uvicorn sqlalchemy
-```
-
-2. Run the server:
-```
-python3 -m uvicorn main:app --reload
+```bash
+docker compose up --build
 ```
 
-3. Open the interactive docs at `http://127.0.0.1:8000/docs`
+All three services (FastAPI, PostgreSQL, Redis) start automatically. FastAPI waits for PostgreSQL to be healthy before starting.
+
+Open the interactive docs at `http://localhost:8000/docs`
 
 ## API Endpoints
 
@@ -55,8 +96,8 @@ python3 -m uvicorn main:app --reload
 |--------|----------|-------------|
 | `POST` | `/posts/` | Create a new blog post |
 | `GET` | `/posts/` | Get all blog posts |
-| `GET` | `/posts/?search=term` | Filter posts by search term |
-| `GET` | `/posts/{id}` | Get a single post by ID |
+| `GET` | `/posts/?search=term` | Filter posts by title |
+| `GET` | `/posts/{id}` | Get a single post by ID (Redis cached) |
 | `PATCH` | `/posts/{id}` | Update a post (partial update) |
 | `DELETE` | `/posts/{id}` | Delete a post |
 
@@ -81,7 +122,7 @@ POST /posts/
   "content": "Hello from my blogging API!",
   "category": "Tech",
   "tags": "fastapi, python",
-  "created_at": "2026-03-17T00:56:26",
+  "created_at": "2026-03-18T00:07:39.304489Z",
   "updated_at": null
 }
 ```
