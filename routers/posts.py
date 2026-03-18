@@ -4,6 +4,10 @@ from typing import List
 import crud
 import schemas
 from database import get_db
+import redis
+import json
+
+r = redis.Redis(host='redis', port=6379, decode_responses=True)
 
 # This router handles all the endpoints related to blog posts.
 router = APIRouter(prefix="/posts", tags=["Posts"])
@@ -28,9 +32,14 @@ def get_posts(search: str = "", db: Session = Depends(get_db)):
 # If the post with the given ID does not exist, it raises a 404 error.
 @router.get("/{post_id}", response_model=schemas.PostResponse)
 def get_post(post_id: int, db: Session = Depends(get_db)):
+    cache_key = f"post:{post_id}" # Generate a unique cache key for the post based on its ID
+    cached = r.get(cache_key) # Check if the post data is already cached in Redis. If it is, return the cached data as a JSON object. If not, retrieve the post from the database, cache it in Redis for future requests, and then return the post data. This caching mechanism helps to reduce database load and improve response times for frequently accessed posts.
+    if cached:
+        return json.loads(cached)
     post = crud.get_post(db, post_id)
     if post is None:
         raise HTTPException(status_code=404, detail="Post not found")
+    r.setex(cache_key, 60, schemas.PostResponse.model_validate(post).model_dump_json()) # Cache the post data in Redis with an expiration time of 60 seconds (1 minute)
     return post
 
 # This endpoint updates an existing post by its ID.
